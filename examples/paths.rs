@@ -9,7 +9,8 @@ fn main() {
         }
     }
     // and now, loopless
+    // filter is slightly awkward because we get references to the tuples
     es::paths(&dir)
-		.filter(|item| item.1.is_file())
-		.map(|item| (item.0,item.1.len())).debug("\n");
+		.filter(|&(_,ref m)| m.is_file())
+		.map(|(p,m)| (p,m.len())).debug("\n");
 }
