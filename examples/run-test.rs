@@ -17,6 +17,7 @@ fn get_crate_name() -> String {
 
 fn main() {
     let file = es::argn_err(1,"please supply a source file");
+    let special = es::argn_or(2,"/");
     let crate_name = get_crate_name();
     let code = es::read_to_string(&file);
     let examples = "../examples";
@@ -52,9 +53,11 @@ fn main() {
     println!("{}", String::from_utf8_lossy(&output.stderr));
     println!("{}", String::from_utf8_lossy(&output.stdout));
     if output.status.success() {
-        let mut snippet = "/// ```\n".to_string();
-        snippet.extend(code.lines().map(|s| format!("/// {}\n",s)));
-        snippet.push_str("/// ```\n");
+        let comment = format!("//{}",special);
+        let guard = format!("{} ```\n",comment);
+        let mut snippet = guard.clone();
+        snippet.extend(code.lines().map(|s| format!("{} {}\n",comment,s)));
+        snippet.push_str(&guard);
         println!("{}",snippet);
     }
     fs::remove_file(&test_file).or_die("can't remove temporary file in examples");

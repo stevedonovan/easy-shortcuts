@@ -29,7 +29,6 @@ And passing a dud filename to this program gives us a clear fatal error:
 
 ```
 ./read_all error: open 'bonzo.txt' No such file or directory (os error 2)
-
 ```
 
 Other than commands, there's another important category of small programs: little
@@ -93,8 +92,8 @@ let s = strs.into_iter().prepend(" hello ");
 assert_eq!(s," hello one hello two hello three ");
 ```
 
-And the old favourite of Pythonistas, `join`. (It's defined on vectors of
-strings but as an iterator method we avoid unnecessary allocations.)
+And that old favourite of Pythonistas, `join`. (It's defined on vectors of
+strings but as an iterator method we avoid unnecessary creation of temporaries.)
 
 ```rust
 let s = "one two three".split_whitespace().join(',');
@@ -127,15 +126,15 @@ Here is a quick way to read a config file where keys and values are separated by
 
 ## Extra String Goodies
 
-I could not resist adding a convenient new string method.
+I could not resist adding a few convenient string methods.
 
 `split_at_delim` is like a combination of the string `find` and `split_at` methods,
 except that the delimiter is not included; `"one = two".split_at_delim('=')` gives
 `Some(("one "," two"))`. `trim` works on the result of this function, converting
 `Option<(&str,&str)>` to `Option<(String,String)>` with any spare whitespace
-trimmed.
+trimmed, or just passes through `None`.
 
-In the above example, note that blank lines will be automatically ignored,
+In the config file example, note that blank lines will be automatically ignored,
 since `split_at_delim` will be `None`, which `trim` passes through.
 
 Another convenience is `is_whitespace` defined on strings. This example counts source
