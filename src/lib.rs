@@ -266,7 +266,7 @@ where E: Display {
     fn or_die(self, msg: &str) -> T {
         match self {
             Ok(t) => t,
-            Err(e) => quit(&format!("{} {}",msg,e))
+            Err(e) => quit(&format!("{} {}", msg,e))
         }
     }
 }
@@ -413,29 +413,31 @@ pub fn argn_or(idx: usize, def: &str) -> String {
 /// get the nth argument or quit with a message.
 pub fn argn_err(idx: usize, msg: &str) -> String {
     match std::env::args().nth(idx) {
-    Some(s) => s,
-    None => quit(&format!("no argument {}: {}",idx,msg))
+        Some(s) => s,
+        None => quit(&format!("no argument {}: {}",idx,msg))
     }
 }
 
+use std::path::Path;
+
 /// open a file for reading, quitting if there's any error.
-pub fn open(file: &str) -> File {
-    match  File::open(file) {
+pub fn open<P: AsRef<Path>>(file: P) -> File {
+    match  File::open(&file) {
         Ok(f) => f,
-        Err(e) => quit(&format!("open '{}' {}",file,e))
+        Err(e) => quit(&format!("open {:?} {}",file.as_ref(),e))
     }
 }
 
 /// create a file for writing, quitting if not possible.
-pub fn create(file: &str) -> File {
-    match File::create(file) {
+pub fn create<P: AsRef<Path>>(file: P) -> File {
+    match File::create(&file) {
         Ok(f) => f,
-        Err(e) => quit(&format!("create '{}' {}",file,e))
+        Err(e) => quit(&format!("create {:?} {}",file.as_ref(),e))
     }
 }
 
 /// read the contents of a file as a string, quitting otherwise
-pub fn read_to_string(file: &str) -> String {
+pub fn read_to_string<P: AsRef<Path>>(file: P) -> String {
     let mut f = open(file);
     let mut s = String::new();
     quit!(f.read_to_string(&mut s));
@@ -443,7 +445,7 @@ pub fn read_to_string(file: &str) -> String {
 }
 
 /// write a String to a new file, or quit
-pub fn write_all(file: &str, buff: String) {
+pub fn write_all<P: AsRef<Path>>(file: P, buff: String) {
     quit!(create(file).write_all(&buff.into_bytes()));
 }
 
@@ -532,14 +534,15 @@ impl Iterator for FileNameIter {
 
 }
 
+
 /// iterator over all entries in a directory.
 /// Returns a tuple of (`path::PathBuf`,`fs::Metadata`);
 /// will quit if the directory does not exist or there
 /// is an i/o error)
-pub fn paths (dir: &str) -> DirIter {
-    match std::fs::read_dir(dir) {
+pub fn paths<P: AsRef<Path>> (dir: P) -> DirIter {
+    match std::fs::read_dir(dir.as_ref()) {
         Ok(s) => DirIter{iter: s},
-        Err(e) => quit(&format!("'{}' {}",dir,e))
+        Err(e) => quit(&format!("{:?} {}",dir.as_ref(),e))
     }
 }
 
@@ -547,10 +550,10 @@ pub fn paths (dir: &str) -> DirIter {
 /// Returns the files as strings;
 /// will quit if the directory does not exist or there
 /// is an i/o error)
-pub fn files (dir: &str) -> FileNameIter {
-    match std::fs::read_dir(dir) {
+pub fn files<P: AsRef<Path>> (dir: P) -> FileNameIter {
+    match std::fs::read_dir(dir.as_ref()) {
         Ok(s) => FileNameIter{iter: s},
-        Err(e) => quit(&format!("'{}' {}",dir,e))
+        Err(e) => quit(&format!("{:?} {}",dir.as_ref(),e))
     }
 }
 
