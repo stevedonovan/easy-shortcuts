@@ -491,15 +491,12 @@ impl <R: io::Read> Iterator for LineIter<R> {
     }
 }
 
-/// implements directory iterator over (path,metatable)
+/// implements directory iterator over (path,metadata)
+/// created by `paths`
 pub struct DirIter {
     iter: std::fs::ReadDir
 }
 
-/// implements directory iterator over filenames
-pub struct FileNameIter {
-    iter: std::fs::ReadDir
-}
 
 impl Iterator for DirIter {
     type Item = (path::PathBuf, fs::Metadata);
@@ -516,6 +513,194 @@ impl Iterator for DirIter {
 
         }
     }
+}
+
+use std::ffi::{OsStr,OsString};
+use std::time::{SystemTime,Duration};
+
+struct TimeSince {
+    now: SystemTime,
+    since: Duration,
+    created: bool, // will be false for 'modified'
+}
+
+impl TimeSince {
+    fn new(d: Duration, created: bool) -> TimeSince {
+        TimeSince {
+            now: SystemTime::now(),
+            since: d,
+            created: created
+        }
+    }
+
+    fn within(&self, m: &fs::Metadata) -> bool {
+        match if self.created {
+            m.created()
+        } else {
+            m.modified()
+        } {
+            Ok(st) => match self.now.duration_since(st) {
+                Ok(dur) => self.since > dur,
+                Err(_) => false
+            },
+            Err(_) => false
+        }
+    }
+}
+
+
+/// implements recursive directory iterator over (path,metadata)
+/// created by `all_paths`
+pub struct RDirIter {
+    iter: DirIter,
+    stack: Vec<DirIter>,
+    follow_all: bool,
+    only_visible: bool,
+    filename: Option<OsString>,
+    ext: Option<OsString>,
+    since: Option<TimeSince>,
+    filedir: Option<bool>,
+}
+
+impl RDirIter {
+    fn new(iter: DirIter) -> RDirIter {
+        RDirIter {
+            iter: iter,
+            stack: Vec::new(),
+            follow_all: false,
+            only_visible: true,
+            filename: None,
+            ext: None,
+            since: None,
+            filedir: None,
+        }
+    }
+
+    // setters
+    /// Follow all hidden directories (default is false)
+    pub fn follow_all(&mut self) -> &mut Self {
+        self.follow_all = true;
+        self
+    }
+
+    /// Show all files, hidden or not (default is false)
+    pub fn show_all(&mut self) -> &mut Self {
+        self.only_visible = false;
+        self
+    }
+
+    /// Match a file name exactly
+    pub fn name(&mut self, n: &str) -> &mut Self {
+        self.filename = Some(OsString::from(n));
+        self
+    }
+
+    /// Match an extension exactly
+    pub fn extension(&mut self, n: &str) -> &mut Self {
+        self.ext = Some(OsString::from(n));
+        self
+    }
+
+    /// Only pass through files (default is all)
+    pub fn files_only(&mut self) -> &mut Self {
+        self.filedir = Some(true);
+        self
+    }
+
+    /// Only pass through directories (default is all)
+    pub fn dirs_only(&mut self) -> &mut Self {
+        self.filedir = Some(false);
+        self
+    }
+
+    /// Files created within the specified duration
+    pub fn created_since(&mut self, d: Duration) -> &mut Self {
+        self.since = Some(TimeSince::new(d,true));
+        self
+    }
+
+    /// Files modified within the specified duration
+    pub fn modified_since(&mut self, d: Duration) -> &mut Self {
+        self.since = Some(TimeSince::new(d,false));
+        self
+    }
+
+    // stack operations
+    fn save_and_set(&mut self, mut d: DirIter) {
+        std::mem::swap(&mut d, &mut self.iter);
+        self.stack.push(d);
+    }
+
+    fn restore (&mut self) -> bool {
+        if let Some(top) = self.stack.pop() {
+            self.iter = top;
+            true
+        } else {
+            false
+        }
+    }
+
+
+}
+
+fn visible(p: &OsStr) -> bool {
+    ! p.to_string_lossy().starts_with('.')
+}
+
+impl Iterator for RDirIter {
+    type Item = (path::PathBuf, fs::Metadata);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.iter.next() {
+                Some((p,m)) => {
+                    {
+                        let filename = p.file_name().unwrap();
+                        if m.is_dir() && (self.follow_all || visible(filename)) {
+                            self.save_and_set(paths(&p));
+                        }
+                        if self.only_visible && ! visible(filename) {
+                            continue;
+                        }
+                        if let Some(ref name) = self.filename {
+                            if filename != name { continue; }
+                        }
+                        if let Some(ref target_ext) = self.ext {
+                            if let Some(ref ext) = p.extension() {
+                                if target_ext != ext {
+                                    continue;
+                                }
+                            } else {
+                                continue;
+                            }
+                        }
+                    }
+                    if let Some(filedir) = self.filedir {
+                        if filedir {
+                            if m.is_dir() { continue; }
+                        } else {
+                            if m.is_file() { continue; }
+                        }
+                    }
+                    if let Some(ref since) = self.since {
+                        if ! since.within(&m) { continue; }
+                    }
+                    return Some((p,m));
+                },
+                None => { // empty our stack and then exit
+                    if ! self.restore() {
+                        break;
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+/// implements directory iterator over filenames
+pub struct FileNameIter {
+    iter: std::fs::ReadDir
 }
 
 impl Iterator for FileNameIter {
@@ -544,6 +729,17 @@ pub fn paths<P: AsRef<Path>> (dir: P) -> DirIter {
         Ok(s) => DirIter{iter: s},
         Err(e) => quit(&format!("{:?} {}",dir.as_ref(),e))
     }
+}
+
+/// recursive iterator over all entries in a directory.
+/// Returns a tuple of (`path::PathBuf`,`fs::Metadata`);
+/// will quit if the directory does not exist or there
+/// is an i/o error)
+///
+/// `RDirIter` has setters for modifying what is returned.
+/// (The default is not to follow hidden files, or show them)
+pub fn all_paths<P: AsRef<Path>> (dir: P) -> RDirIter {
+    RDirIter::new(paths(dir.as_ref()))
 }
 
 /// iterator over all files in a directory.
