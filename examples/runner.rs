@@ -3,6 +3,7 @@ extern crate easy_shortcuts as es;
 use es::traits::*;
 use std::process;
 use std::env;
+use std::fs;
 
 fn rustup_lib() -> String {
     let tchain = es::shell("rustup toolchain list").lines()
@@ -14,6 +15,11 @@ fn rustup_lib() -> String {
 }
 
 fn main() {
+    let temp = "temp";
+    if ! fs::metadata(temp).is_dir() {
+        fs::create_dir(temp).or_die("cannot create temp directory here");
+    }
+    
     let file = es::argn_err(1,"please supply a source file");
     let exti = file.find('.').or_die("must have an extension");
     if &file[exti..] != ".rs" {
@@ -26,7 +32,8 @@ fn main() {
     }
     if code.find("env::").is_some() {
         prefix += "use std::env;\n";
-    }
+    }    
+   
     //println!("{}",rustup_lib());
     let code = format!("{}
 use std::error::Error;
