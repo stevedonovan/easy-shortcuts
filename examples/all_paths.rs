@@ -7,7 +7,8 @@ fn main() {
     // .show_all().name(".git")
     // .extension("rs")
     let d = Duration::from_secs(60);
-    for (p,_) in es::all_paths(&dir).files_only().modified_since(d) {
+    //~ for (p,_) in es::all_paths(&dir).files_only().modified_since(d) {
+    for (p,_) in es::all_paths(&dir).exclude("target") {
         println!("{:?}",p);
     }
 

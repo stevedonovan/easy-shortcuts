@@ -560,6 +560,8 @@ pub struct RDirIter {
     ext: Option<OsString>,
     since: Option<TimeSince>,
     filedir: Option<bool>,
+    follow_symlinks: bool,
+    exclude: Vec<OsString>,
 }
 
 impl RDirIter {
@@ -573,19 +575,33 @@ impl RDirIter {
             ext: None,
             since: None,
             filedir: None,
+            follow_symlinks: false,
+            exclude: Vec::new(),
         }
     }
 
     // setters
-    /// Follow all hidden directories (default is false)
+    /// Follow hidden directories (default is false)
     pub fn follow_all(&mut self) -> &mut Self {
         self.follow_all = true;
         self
     }
+    
+    /// Follow symlinks to directories (default is false)
+    pub fn follow_symlinks(&mut self) -> &mut Self {
+        self.follow_symlinks = true;
+        self
+    }    
 
     /// Show all files, hidden or not (default is false)
     pub fn show_all(&mut self) -> &mut Self {
         self.only_visible = false;
+        self
+    }
+    
+    /// Exclude files by name (works on file name part)
+    pub fn exclude(&mut self, s: &str) -> &mut Self {
+        self.exclude.push(s.into());
         self
     }
 
@@ -647,6 +663,10 @@ fn visible(p: &OsStr) -> bool {
     ! p.to_string_lossy().starts_with('.')
 }
 
+fn is_symlink(p: &Path) -> bool {
+    p.symlink_metadata().or_die("can't get symlink metadata").file_type().is_symlink()
+}
+
 impl Iterator for RDirIter {
     type Item = (path::PathBuf, fs::Metadata);
 
@@ -656,7 +676,13 @@ impl Iterator for RDirIter {
                 Some((p,m)) => {
                     {
                         let filename = p.file_name().unwrap();
-                        if m.is_dir() && (self.follow_all || visible(filename)) {
+                        if self.exclude.iter().any(|s| s == filename) {
+                            continue;
+                        }
+                        if m.is_dir()
+                            && ((self.follow_all || visible(filename))
+                                || (self.follow_symlinks || is_symlink(&p)))
+                        {
                             self.save_and_set(paths(&p));
                         }
                         if self.only_visible && ! visible(filename) {
