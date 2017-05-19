@@ -20,9 +20,10 @@ fn semver_i (s: &str) -> u64 {
 
 fn main() {
     let mut crate_name = es::argn_err(1,"please supply crate name");
-    let home = env::var("CARGO_HOME").unwrap_or(env::var("HOME").or_die("no home!"));
+    let home = env::var("CARGO_HOME").unwrap_or(env::var("HOME").or_die("no home!") + "/.cargo");
     // Use the Shell, Luke!
-    let crate_dir = es::shell(&format!("echo {}/.cargo/registry/src/*",home));
+    println!("{:?}",home);
+    let crate_dir = es::shell(&format!("echo {}/registry/src/*",home));
     if crate_dir.find('*').is_some() {
         es::quit("no cargo cache");
     }
