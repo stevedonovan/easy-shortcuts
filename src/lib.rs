@@ -428,6 +428,11 @@ pub fn open<P: AsRef<Path>>(file: P) -> File {
     }
 }
 
+/// open a buffered file for reading, quitting if there's any error.
+pub fn open_buffered<P: AsRef<Path>>(file: P) -> io::BufReader<File> {
+    io::BufReader::new(open(file))
+}
+
 /// create a file for writing, quitting if not possible.
 pub fn create<P: AsRef<Path>>(file: P) -> File {
     match File::create(&file) {
@@ -445,9 +450,16 @@ pub fn read_to_string<P: AsRef<Path>>(file: P) -> String {
 }
 
 /// write a String to a new file, or quit
-pub fn write_all<P: AsRef<Path>>(file: P, buff: String) {
-    quit!(create(file).write_all(&buff.into_bytes()));
+pub fn write_all<P: AsRef<Path>>(file: P, buff: &str) {
+    quit!(create(file).write_all(&buff.as_bytes()));
 }
+
+#[cfg(target_os = "windows")]
+const CMD: &str = "cmd";
+
+#[cfg(not(target_os = "windows"))]
+const CMD: &str = "sh";
+
 
 /// execute a shell command, combining stdout and stderr,
 /// and return the result as a string
@@ -459,7 +471,7 @@ pub fn write_all<P: AsRef<Path>>(file: P, buff: String) {
 /// assert!(res.starts_with("rustc"));
 /// ```
 pub fn shell(cmd: &str) -> String {
-    let o = Command::new("sh")
+    let o = Command::new(CMD)
      .arg("-c")
      .arg(&format!("{} 2>&1",cmd))
      .output()
@@ -586,19 +598,19 @@ impl RDirIter {
         self.follow_all = true;
         self
     }
-    
+
     /// Follow symlinks to directories (default is false)
     pub fn follow_symlinks(&mut self) -> &mut Self {
         self.follow_symlinks = true;
         self
-    }    
+    }
 
     /// Show all files, hidden or not (default is false)
     pub fn show_all(&mut self) -> &mut Self {
         self.only_visible = false;
         self
     }
-    
+
     /// Exclude files by name (works on file name part)
     pub fn exclude(&mut self, s: &str) -> &mut Self {
         self.exclude.push(s.into());
