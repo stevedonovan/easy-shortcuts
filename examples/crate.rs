@@ -8,10 +8,6 @@ fn path_file_name(p: &path::Path) -> String {
     p.file_name().unwrap().to_string_lossy().to_string()
 }
 
-fn char_at(s: &str, i: usize) -> char {
-    s.chars().nth(i).unwrap()
-}
-
 // there's a Crate for This...
 fn semver_i (s: &str) -> u64 {
     let v = s.split('.').filter_map(|s| s.parse::<u64>().ok()).to_vec();
@@ -19,25 +15,22 @@ fn semver_i (s: &str) -> u64 {
 }
 
 fn main() {
-    let mut crate_name = es::argn_err(1,"please supply crate name");
-    let home = env::var("CARGO_HOME").unwrap_or(env::var("HOME").or_die("no home!") + "/.cargo");
-    // Use the Shell, Luke!
-    println!("{:?}",home);
-    let crate_dir = es::shell(&format!("echo {}/registry/src/*",home));
-    if crate_dir.find('*').is_some() {
-        es::quit("no cargo cache");
-    }
-    crate_name += "-";
-    let endc = crate_name.len();
+    let crate_name = es::argn_err(1,"please supply crate name");
+    let home = env::var("CARGO_HOME") // set in cargo runs
+        .unwrap_or(env::var("HOME").or_die("no home!") + "/.cargo");
+    let crate_root = path::PathBuf::from(home + "/registry/src");
+    // actual crate source is in some fairly arbitrary subdirectory of this
+    let mut crate_dir = crate_root.clone();
+    crate_dir.push(es::files(&crate_root).next().or_die("no crate cache directory"));    
     
     let mut crates = Vec::new();
     for (p,d) in es::paths(&crate_dir) {
         if ! d.is_dir() { continue; }
         let filename = path_file_name(&p);
-        // well yes, regex would be rather more elegant here ;)
-        // This distinguishes between 'regex' and 'regex-syntax' etc
-        if filename.starts_with(&crate_name) && char_at(&filename,endc).is_digit(10) {
-            crates.push((p,semver_i(&filename[endc..])));
+        if let Some(endc) = filename.rfind('-') {
+            if &filename[0..endc] == crate_name {
+                crates.push((p,semver_i(&filename[endc+1..])));
+            }
         }
     }
     // crate versions in ascending order by semver rules    

@@ -28,16 +28,16 @@ fn main() {
     let (special,question) = kind.split_at(1);
     let indent = if special == "/" {"    "} else {""};
     let question = if question == "?" {true} else {false};
-    
+
     let mut template = String::new();
     let mut before = String::new();
     let mut after = String::new();
-    
+
     // Tests assume 'extern crate your_crate' unless there's already a declaration
     if code.find("extern crate").is_none() {
         template += &format!("extern crate {};\n",crate_name);
     }
-    
+
     // they will also wrap your code in a main function
     if ! question {
         template += "fn main() {\n";
@@ -52,14 +52,14 @@ fn main() {
         template += &code;
         after += "Ok(())\n}\n\nfn main() {\n   run().unwrap();\n}";
         template += &after;
-    } 
+    }
     println!("{}",template);
-    
+
     if ! fs::metadata(examples).is_dir() {
         fs::create_dir(examples).or_die("cannot create examples directory");
     }
     let test_file = format!("{}/{}",examples,file);
-    es::write_all(&test_file,template);
+    es::write_all(&test_file,&template);
 
     // let cargo run the example
     let output = process::Command::new("cargo")
@@ -73,10 +73,10 @@ fn main() {
     if output.stdout.len() > 0 {
         println!("WARNING - tests will suppress this output ******");
         println!("{}", String::from_utf8_lossy(&output.stdout));
-    }    
+    }
     if output.status.success() {
         println!("Copy and paste this output into your module ******\n");
-        let comment = format!("{}//{}",indent,special);        
+        let comment = format!("{}//{}",indent,special);
         let guard = format!("{} ```\n",comment);
         let hide = format!("{} #",comment);
         let mut snippet = String::new();
