@@ -1,10 +1,10 @@
 [package]
 name = "easy-shortcuts"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["steve donovan <steve.j.donovan@gmail.com>"]
 description = "easy helper utilities for short command-line programs"
 
-documentation = "https://docs.rs/easy-shortcuts/0.1.0/easy_shortcuts"
+documentation = "https://docs.rs/easy-shortcuts"
 repository = "https://github.com/stevedonovan/easy-shortcuts"
 
 readme = "readme.md"
