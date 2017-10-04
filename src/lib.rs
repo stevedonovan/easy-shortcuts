@@ -350,15 +350,15 @@ where T: Debug, I: Iterator<Item=T> {
 impl MetadataLike for io::Result<fs::Metadata> {
     fn is_dir(self) -> bool {
         match self {
-        Ok(meta) => meta.is_dir(),
-        Err(_) => false
+            Ok(meta) => meta.is_dir(),
+            Err(_) => false
         }
     }
 
     fn is_file(self) -> bool {
         match self {
-        Ok(meta) => meta.is_file(),
-        Err(_) => false
+            Ok(meta) => meta.is_file(),
+            Err(_) => false
         }
     }
 }
@@ -454,13 +454,6 @@ pub fn write_all<P: AsRef<Path>>(file: P, buff: &str) {
     quit!(create(file).write_all(&buff.as_bytes()));
 }
 
-#[cfg(target_os = "windows")]
-const CMD: &str = "cmd";
-
-#[cfg(not(target_os = "windows"))]
-const CMD: &str = "sh";
-
-
 /// execute a shell command, combining stdout and stderr,
 /// and return the result as a string
 ///
@@ -471,12 +464,12 @@ const CMD: &str = "sh";
 /// assert!(res.starts_with("rustc"));
 /// ```
 pub fn shell(cmd: &str) -> String {
-    let o = Command::new(CMD)
-     .arg("-c")
+    let o = Command::new(if cfg!(windows) {"cmd.exe"} else {"/bin/sh"})
+     .arg(if cfg!(windows) {"/c"} else {"-c"})
      .arg(&format!("{} 2>&1",cmd))
      .output()
      .expect("failed to execute shell");
-    quit!(String::from_utf8(o.stdout)).trim_right_matches('\n').to_string()
+    String::from_utf8_lossy(&o.stdout).trim_right_matches('\n').to_string()
 }
 
 /// implements line iterator over a readable.
@@ -527,215 +520,6 @@ impl Iterator for DirIter {
     }
 }
 
-use std::ffi::{OsStr,OsString};
-use std::time::{SystemTime,Duration};
-
-struct TimeSince {
-    now: SystemTime,
-    since: Duration,
-    created: bool, // will be false for 'modified'
-}
-
-impl TimeSince {
-    fn new(d: Duration, created: bool) -> TimeSince {
-        TimeSince {
-            now: SystemTime::now(),
-            since: d,
-            created: created
-        }
-    }
-
-    fn within(&self, m: &fs::Metadata) -> bool {
-        match if self.created {
-            m.created()
-        } else {
-            m.modified()
-        } {
-            Ok(st) => match self.now.duration_since(st) {
-                Ok(dur) => self.since > dur,
-                Err(_) => false
-            },
-            Err(_) => false
-        }
-    }
-}
-
-
-/// implements recursive directory iterator over (path,metadata)
-/// created by `all_paths`
-pub struct RDirIter {
-    iter: DirIter,
-    stack: Vec<DirIter>,
-    follow_all: bool,
-    only_visible: bool,
-    filename: Option<OsString>,
-    ext: Option<OsString>,
-    since: Option<TimeSince>,
-    filedir: Option<bool>,
-    follow_symlinks: bool,
-    exclude: Vec<OsString>,
-}
-
-impl RDirIter {
-    fn new(iter: DirIter) -> RDirIter {
-        RDirIter {
-            iter: iter,
-            stack: Vec::new(),
-            follow_all: false,
-            only_visible: true,
-            filename: None,
-            ext: None,
-            since: None,
-            filedir: None,
-            follow_symlinks: false,
-            exclude: Vec::new(),
-        }
-    }
-
-    // setters
-    /// Follow hidden directories (default is false)
-    pub fn follow_all(&mut self) -> &mut Self {
-        self.follow_all = true;
-        self
-    }
-
-    /// Follow symlinks to directories (default is false)
-    pub fn follow_symlinks(&mut self) -> &mut Self {
-        self.follow_symlinks = true;
-        self
-    }
-
-    /// Show all files, hidden or not (default is false)
-    pub fn show_all(&mut self) -> &mut Self {
-        self.only_visible = false;
-        self
-    }
-
-    /// Exclude files by name (works on file name part)
-    pub fn exclude(&mut self, s: &str) -> &mut Self {
-        self.exclude.push(s.into());
-        self
-    }
-
-    /// Match a file name exactly
-    pub fn name(&mut self, n: &str) -> &mut Self {
-        self.filename = Some(OsString::from(n));
-        self
-    }
-
-    /// Match an extension exactly
-    pub fn extension(&mut self, n: &str) -> &mut Self {
-        self.ext = Some(OsString::from(n));
-        self
-    }
-
-    /// Only pass through files (default is all)
-    pub fn files_only(&mut self) -> &mut Self {
-        self.filedir = Some(true);
-        self
-    }
-
-    /// Only pass through directories (default is all)
-    pub fn dirs_only(&mut self) -> &mut Self {
-        self.filedir = Some(false);
-        self
-    }
-
-    /// Files created within the specified duration
-    pub fn created_since(&mut self, d: Duration) -> &mut Self {
-        self.since = Some(TimeSince::new(d,true));
-        self
-    }
-
-    /// Files modified within the specified duration
-    pub fn modified_since(&mut self, d: Duration) -> &mut Self {
-        self.since = Some(TimeSince::new(d,false));
-        self
-    }
-
-    // stack operations
-    fn save_and_set(&mut self, mut d: DirIter) {
-        std::mem::swap(&mut d, &mut self.iter);
-        self.stack.push(d);
-    }
-
-    fn restore (&mut self) -> bool {
-        if let Some(top) = self.stack.pop() {
-            self.iter = top;
-            true
-        } else {
-            false
-        }
-    }
-
-
-}
-
-fn visible(p: &OsStr) -> bool {
-    ! p.to_string_lossy().starts_with('.')
-}
-
-fn is_symlink(p: &Path) -> bool {
-    p.symlink_metadata().or_die("can't get symlink metadata").file_type().is_symlink()
-}
-
-impl Iterator for RDirIter {
-    type Item = (path::PathBuf, fs::Metadata);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.iter.next() {
-                Some((p,m)) => {
-                    {
-                        let filename = p.file_name().unwrap();
-                        if self.exclude.iter().any(|s| s == filename) {
-                            continue;
-                        }
-                        if m.is_dir()
-                            && ((self.follow_all || visible(filename))
-                                || (self.follow_symlinks || is_symlink(&p)))
-                        {
-                            self.save_and_set(paths(&p));
-                        }
-                        if self.only_visible && ! visible(filename) {
-                            continue;
-                        }
-                        if let Some(ref name) = self.filename {
-                            if filename != name { continue; }
-                        }
-                        if let Some(ref target_ext) = self.ext {
-                            if let Some(ref ext) = p.extension() {
-                                if target_ext != ext {
-                                    continue;
-                                }
-                            } else {
-                                continue;
-                            }
-                        }
-                    }
-                    if let Some(filedir) = self.filedir {
-                        if filedir {
-                            if m.is_dir() { continue; }
-                        } else {
-                            if m.is_file() { continue; }
-                        }
-                    }
-                    if let Some(ref since) = self.since {
-                        if ! since.within(&m) { continue; }
-                    }
-                    return Some((p,m));
-                },
-                None => { // empty our stack and then exit
-                    if ! self.restore() {
-                        break;
-                    }
-                }
-            }
-        }
-        None
-    }
-}
-
 /// implements directory iterator over filenames
 pub struct FileNameIter {
     iter: std::fs::ReadDir
@@ -767,17 +551,6 @@ pub fn paths<P: AsRef<Path>> (dir: P) -> DirIter {
         Ok(s) => DirIter{iter: s},
         Err(e) => quit(&format!("{:?} {}",dir.as_ref(),e))
     }
-}
-
-/// recursive iterator over all entries in a directory.
-/// Returns a tuple of (`path::PathBuf`,`fs::Metadata`);
-/// will quit if the directory does not exist or there
-/// is an i/o error)
-///
-/// `RDirIter` has setters for modifying what is returned.
-/// (The default is not to follow hidden files, or show them)
-pub fn all_paths<P: AsRef<Path>> (dir: P) -> RDirIter {
-    RDirIter::new(paths(dir.as_ref()))
 }
 
 /// iterator over all files in a directory.
