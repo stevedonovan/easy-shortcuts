@@ -1,6 +1,6 @@
 [package]
 name = "easy-shortcuts"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["steve donovan <steve.j.donovan@gmail.com>"]
 description = "easy helper utilities for short command-line programs"
 
