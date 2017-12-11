@@ -138,6 +138,18 @@ pub mod traits {
         /// use std::env;
         /// let = env::home_dir().or_die("no home!");
         fn or_die(self, msg: &str) -> T;
+
+        /// like `or_die` but takes a closure.
+        /// Will be passed error message or 'none'
+        /// for `Option<T>`.
+        ///
+        ///
+        /// extern crate easy_shortcuts;
+        /// use easy_shortcuts::traits::Die;
+        /// use std::env;
+        /// let = env::home_dir().or_then_die(|_| "no home!".to_string());
+        fn or_then_die<C>(self, callback: C) -> T
+        where C: Fn(&str)->String;
     }
 
     /// useful extra string operations
@@ -269,6 +281,15 @@ where E: Display {
             Err(e) => quit(&format!("{} {}", msg,e))
         }
     }
+
+    fn or_then_die<C>(self, callback: C) -> T
+    where C: Fn(&str)->String {
+        match self {
+            Ok(t) => t,
+            Err(e) => quit(&callback(&e.to_string()))
+        }
+    }
+
 }
 
 impl <T> Die<T> for Option<T>  {
@@ -278,6 +299,15 @@ impl <T> Die<T> for Option<T>  {
             None => quit(msg)
         }
     }
+
+    fn or_then_die<C>(self, callback: C) -> T
+    where C: Fn(&str)->String  {
+        match self {
+            Some(t) => t,
+            None => quit(&callback("none"))
+        }
+    }
+
 }
 
 use std::iter::FromIterator;
